@@ -12,6 +12,9 @@ const activityRoutes = require("../modules/activity/activity.route");
 const paymentRoutes = require("../modules/payment/payment.route");
 const dashboardRoutes = require("../modules/dashboard/dashboard.route");
 const adminRoutes = require("../modules/admin/admin.route");
+const reportRoutes = require("../modules/report/report.route");
+
+
 
 router.use("/users", userRoutes);
 
@@ -32,5 +35,7 @@ router.use("/payments", paymentRoutes);
 router.use("/dashboard", dashboardRoutes);
 
 router.use("/admin", adminRoutes);
+
+router.use("/reports", reportRoutes);
 
 module.exports = router;
