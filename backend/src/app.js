@@ -1,47 +1,19 @@
 const express = require("express");
-const helmet = require("helmet");
-const cors = require("cors");
-const compression = require("compression");
-const cookieParser = require("cookie-parser");
-const morgan = require("morgan");
-
-const routes = require("./routes");
-
-const notFound = require("./middlewares/notFound.middleware");
-const errorHandler = require("./middlewares/error.middleware");
 
 const app = express();
 
-app.use(helmet());
+const webhookRoutes = require("./routes/webhook.route");
 
-app.use(
-    cors({
-        origin: process.env.CLIENT_URL,
-        credentials: true,
-    })
-);
-
-app.use(compression());
-
-app.use(morgan("dev"));
+app.use("/api/v1/webhooks", webhookRoutes);
 
 app.use(express.json());
 
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({
+    extended: true,
+}));
 
-app.use(cookieParser());
-
-app.get("/health", (req, res) => {
-    res.json({
-        success: true,
-        message: "Server Running",
-    });
-});
+const routes = require("./routes");
 
 app.use("/api/v1", routes);
-
-app.use(notFound);
-
-app.use(errorHandler);
 
 module.exports = app;

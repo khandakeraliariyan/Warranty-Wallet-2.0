@@ -9,6 +9,7 @@ const documentRoutes = require("../modules/document/document.route");
 const aiRoutes = require("../modules/ai/ai.route");
 const notificationRoutes = require("../modules/notification/notification.route");
 const activityRoutes = require("../modules/activity/activity.route");
+const paymentRoutes = require("../modules/payment/payment.route");
 
 router.use("/users", userRoutes);
 
@@ -23,5 +24,7 @@ router.use("/ai", aiRoutes);
 router.use("/notifications", notificationRoutes);
 
 router.use("/activities", activityRoutes);
+
+router.use("/payments", paymentRoutes);
 
 module.exports = router;
