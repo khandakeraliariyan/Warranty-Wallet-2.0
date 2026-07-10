@@ -72,6 +72,14 @@ const remove = (id) => {
     });
 };
 
+const countByUser = (userId) => {
+    return prisma.notification.count({
+        where: {
+            userId,
+        },
+    });
+};
+
 module.exports = {
     create,
     findById,
@@ -80,4 +88,5 @@ module.exports = {
     markAsRead,
     markAllAsRead,
     remove,
+    countByUser
 };
