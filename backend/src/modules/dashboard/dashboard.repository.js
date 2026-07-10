@@ -1,0 +1,450 @@
+const prisma = require("../../config/prisma");
+
+const getProductStatistics = async (userId) => {
+    const [total, active, expiringSoon, expired, purchaseValue] = await Promise.all([
+        prisma.product.count({
+            where: {
+                userId,
+                isDeleted: false,
+            },
+        }),
+
+        prisma.product.count({
+            where: {
+                userId,
+                status: "ACTIVE",
+                isDeleted: false,
+            },
+        }),
+
+        prisma.product.count({
+            where: {
+                userId,
+                status: "EXPIRING_SOON",
+                isDeleted: false,
+            },
+        }),
+
+        prisma.product.count({
+            where: {
+                userId,
+                status: "EXPIRED",
+                isDeleted: false,
+            },
+        }),
+
+        prisma.product.aggregate({
+            where: {
+                userId,
+                isDeleted: false,
+            },
+            _sum: {
+                purchasePrice: true,
+            },
+        }),
+    ]);
+
+    return {
+        total,
+        active,
+        expiringSoon,
+        expired,
+        purchaseValue:
+            purchaseValue._sum.purchasePrice || 0,
+    };
+};
+
+const getDocumentStatistics = async (userId) => {
+    return prisma.document.count({
+
+        where: {
+
+            product: {
+
+                userId,
+
+            },
+
+        },
+
+    });
+
+};
+
+const getNotificationStatistics = async (userId) => {
+    const [total, unread,] = await Promise.all([
+
+        prisma.notification.count({
+
+            where: {
+
+                userId,
+
+            },
+
+        }),
+
+        prisma.notification.count({
+
+            where: {
+
+                userId,
+
+                isRead: false,
+
+            },
+
+        }),
+
+    ]);
+
+    return {
+
+        total,
+
+        unread,
+
+    };
+
+};
+
+const getRecentNotifications = async (userId, limit = 5) => {
+
+    return prisma.notification.findMany({
+
+        where: {
+
+            userId,
+
+        },
+
+        orderBy: {
+
+            createdAt: "desc",
+
+        },
+
+        take: limit,
+
+    });
+
+};
+
+
+const getRecentActivities = async (userId, limit = 5) => {
+
+    return prisma.activityLog.findMany({
+
+        where: {
+
+            userId,
+
+        },
+
+        orderBy: {
+
+            createdAt: "desc",
+
+        },
+
+        take: limit,
+
+    });
+
+};
+
+const getCategoryDistribution = async (userId) => {
+    return prisma.product.groupBy({
+
+        by: [
+
+            "categoryId",
+
+        ],
+
+        where: {
+
+            userId,
+
+            isDeleted: false,
+
+        },
+
+        _count: {
+
+            id: true,
+
+        },
+
+    });
+
+};
+
+const getWarrantyTimeline = async (userId, limit = 10) => {
+
+    return prisma.product.findMany({
+
+        where: {
+
+            userId,
+
+            isDeleted: false,
+
+        },
+
+        orderBy: {
+
+            expiryDate: "asc",
+
+        },
+
+        select: {
+
+            id: true,
+
+            name: true,
+
+            expiryDate: true,
+
+            status: true,
+
+        },
+
+        take: limit,
+
+    });
+
+};
+
+const getAdminStatistics = async () => {
+    const [
+
+        totalUsers,
+
+        premiumUsers,
+
+        totalProducts,
+
+        totalRevenue,
+
+        successfulPayments,
+
+    ] = await Promise.all([
+
+        prisma.user.count(),
+
+        prisma.subscription.count({
+
+            where: {
+
+                isActive: true,
+
+            },
+
+        }),
+
+        prisma.product.count({
+
+            where: {
+
+                isDeleted: false,
+
+            },
+
+        }),
+
+        prisma.payment.aggregate({
+
+            where: {
+
+                status: "SUCCESS",
+
+            },
+
+            _sum: {
+
+                amount: true,
+
+            },
+
+        }),
+
+        prisma.payment.count({
+
+            where: {
+
+                status: "SUCCESS",
+
+            },
+
+        }),
+
+    ]);
+
+    return {
+
+        totalUsers,
+
+        premiumUsers,
+
+        totalProducts,
+
+        totalRevenue:
+            totalRevenue._sum.amount || 0,
+
+        successfulPayments,
+
+    };
+
+};
+
+const getRecentPayments = async (limit = 10) => {
+
+    return prisma.payment.findMany({
+
+        orderBy: {
+
+            createdAt: "desc",
+
+        },
+
+        include: {
+
+            user: {
+
+                select: {
+
+                    id: true,
+
+                    name: true,
+
+                    email: true,
+
+                },
+
+            },
+
+        },
+
+        take: limit,
+
+    });
+
+};
+
+const getMonthlyRevenue = async (year) => {
+    const start = new Date(
+        year,
+        0,
+        1
+    );
+
+    const end = new Date(
+        year + 1,
+        0,
+        1
+    );
+
+    return prisma.payment.groupBy({
+
+        by: [
+
+            "createdAt",
+
+        ],
+
+        where: {
+
+            status: "SUCCESS",
+
+            createdAt: {
+
+                gte: start,
+
+                lt: end,
+
+            },
+
+        },
+
+        _sum: {
+
+            amount: true,
+
+        },
+
+    });
+
+};
+
+const getProductGrowth = async (year) => {
+
+    const start = new Date(
+        year,
+        0,
+        1
+    );
+
+    const end = new Date(
+        year + 1,
+        0,
+        1
+    );
+
+    return prisma.product.groupBy({
+
+        by: [
+
+            "createdAt",
+
+        ],
+
+        where: {
+
+            createdAt: {
+
+                gte: start,
+
+                lt: end,
+
+            },
+
+            isDeleted: false,
+
+        },
+
+        _count: {
+
+            id: true,
+
+        },
+
+    });
+
+};
+
+module.exports = {
+
+    getProductStatistics,
+
+    getDocumentStatistics,
+
+    getNotificationStatistics,
+
+    getRecentNotifications,
+
+    getRecentActivities,
+
+    getCategoryDistribution,
+
+    getWarrantyTimeline,
+
+    getAdminStatistics,
+
+    getRecentPayments,
+
+    getMonthlyRevenue,
+
+    getProductGrowth,
+
+};
