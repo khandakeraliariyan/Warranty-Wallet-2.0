@@ -6,6 +6,7 @@ const userRoutes = require("../modules/user/user.route");
 const categoryRoutes = require("../modules/category/category.route");
 const productRoutes = require("../modules/product/product.route");
 const documentRoutes = require("../modules/document/document.route");
+const aiRoutes = require("../modules/ai/ai.route");
 
 router.use("/users", userRoutes);
 
@@ -14,5 +15,7 @@ router.use("/categories", categoryRoutes);
 router.use("/products", productRoutes);
 
 router.use("/", documentRoutes);
+
+router.use("/ai", aiRoutes);
 
 module.exports = router;
