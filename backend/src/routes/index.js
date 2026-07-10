@@ -11,6 +11,7 @@ const notificationRoutes = require("../modules/notification/notification.route")
 const activityRoutes = require("../modules/activity/activity.route");
 const paymentRoutes = require("../modules/payment/payment.route");
 const dashboardRoutes = require("../modules/dashboard/dashboard.route");
+const adminRoutes = require("../modules/admin/admin.route");
 
 router.use("/users", userRoutes);
 
@@ -29,5 +30,7 @@ router.use("/activities", activityRoutes);
 router.use("/payments", paymentRoutes);
 
 router.use("/dashboard", dashboardRoutes);
+
+router.use("/admin", adminRoutes);
 
 module.exports = router;
