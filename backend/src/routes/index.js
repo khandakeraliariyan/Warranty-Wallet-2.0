@@ -8,6 +8,7 @@ const productRoutes = require("../modules/product/product.route");
 const documentRoutes = require("../modules/document/document.route");
 const aiRoutes = require("../modules/ai/ai.route");
 const notificationRoutes = require("../modules/notification/notification.route");
+const activityRoutes = require("../modules/activity/activity.route");
 
 router.use("/users", userRoutes);
 
@@ -20,5 +21,7 @@ router.use("/", documentRoutes);
 router.use("/ai", aiRoutes);
 
 router.use("/notifications", notificationRoutes);
+
+router.use("/activities", activityRoutes);
 
 module.exports = router;
