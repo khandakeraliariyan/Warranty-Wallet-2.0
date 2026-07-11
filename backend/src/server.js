@@ -1,9 +1,14 @@
-require("dotenv").config();
-
 const app = require("./app");
+const env = require("./config/env");
 
-const PORT = process.env.PORT || 5000;
+const { startCronJobs } = require("./jobs");
+
+const PORT = env.PORT || 5000;
 
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+
+    console.log(`Server running on ${PORT}`);
+
+    startCronJobs();
+
 });
