@@ -35,7 +35,8 @@ const getProducts = asyncHandler(async (req, res) => {
 
 const getProductById = asyncHandler(async (req, res) => {
     const product = await productService.getProductById(
-        req.params.id
+        req.params.id,
+        req.user
     );
 
     return res.status(200).json(

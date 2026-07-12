@@ -17,7 +17,7 @@ const findById = (id) => {
         },
         include: {
             category: true,
-            invoices: true,
+            documents: true,
         },
     });
 };
@@ -92,7 +92,7 @@ const findBySerialNumber = (userId, serialNumber) => {
 };
 
 const findByInvoiceNumber = (invoiceNumber) => {
-    return prisma.invoice.findFirst({
+    return prisma.document.findFirst({
         where: {
             invoiceNumber,
         },
@@ -133,14 +133,31 @@ const latestProducts = (userId, limit = 5) => {
     });
 };
 
-const findExpiringProducts = (date) => {
+const findExpiringProducts = (fromDate, toDate) => {
     return prisma.product.findMany({
         where: {
             expiryDate: {
-                lte: date,
-
+                gte: fromDate,
+                lte: toDate,
             },
             status: "ACTIVE",
+            isDeleted: false,
+        },
+        include: {
+            user: true,
+        },
+    });
+};
+
+const findExpiredProducts = (date) => {
+    return prisma.product.findMany({
+        where: {
+            expiryDate: {
+                lt: date,
+            },
+            status: {
+                not: "EXPIRED",
+            },
             isDeleted: false,
         },
         include: {
@@ -184,6 +201,8 @@ module.exports = {
     latestProducts,
 
     findExpiringProducts,
+
+    findExpiredProducts,
 
     updateStatus
 };
