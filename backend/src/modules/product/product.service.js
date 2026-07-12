@@ -98,7 +98,7 @@ const getProducts = async (user, query) => {
     };
 };
 
-const getProductById = async (id) => {
+const getProductById = async (id, user) => {
     const product = await productRepository.findById(id);
 
     if (!product) {
@@ -106,6 +106,10 @@ const getProductById = async (id) => {
             404,
             "Product not found."
         );
+    }
+
+    if (product.userId !== user.id && user.role !== "ADMIN") {
+        throw new ApiError(403, "Forbidden.");
     }
 
     return product;

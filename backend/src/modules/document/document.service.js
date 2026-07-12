@@ -70,7 +70,11 @@ const uploadDocuments = async ({ user, productId, files, type, }) => {
         const document = await documentRepository.create({
             productId,
 
-            type,
+            userId:
+                user.id,
+
+            fileType:
+                type,
 
             fileName:
                 file.originalname,
@@ -81,14 +85,11 @@ const uploadDocuments = async ({ user, productId, files, type, }) => {
             publicId:
                 uploaded.public_id,
 
-            mimeType:
-                file.mimetype,
+            provider:
+                "cloudinary",
 
             fileSize:
                 file.size,
-
-            uploadedBy:
-                user.id,
         });
 
         uploadedDocuments.push(
@@ -177,7 +178,7 @@ const replaceDocument = async ({ id, user, file, }) => {
 
     const uploaded = await uploadFile(
         file.buffer,
-        getFolder(document.type)
+        getFolder(document.fileType)
     );
 
     return documentRepository.update(
@@ -191,9 +192,6 @@ const replaceDocument = async ({ id, user, file, }) => {
 
             publicId:
                 uploaded.public_id,
-
-            mimeType:
-                file.mimetype,
 
             fileSize:
                 file.size,

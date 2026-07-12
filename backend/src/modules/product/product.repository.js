@@ -17,7 +17,7 @@ const findById = (id) => {
         },
         include: {
             category: true,
-            invoices: true,
+            documents: true,
         },
     });
 };
@@ -92,7 +92,7 @@ const findBySerialNumber = (userId, serialNumber) => {
 };
 
 const findByInvoiceNumber = (invoiceNumber) => {
-    return prisma.invoice.findFirst({
+    return prisma.document.findFirst({
         where: {
             invoiceNumber,
         },

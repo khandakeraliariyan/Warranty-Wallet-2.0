@@ -35,12 +35,12 @@ const findById = async (id) => {
     });
 };
 
-const findManyByProduct = async ( productId, type = null) => {
+const findManyByProduct = async ( productId, fileType = null) => {
     return prisma.document.findMany({
         where: {
             productId,
 
-            ...(type && { type }),
+            ...(fileType && { fileType }),
         },
 
         orderBy: {
@@ -57,11 +57,11 @@ const countByProduct = async (  productId) => {
     });
 };
 
-const countByType = async (  productId,  type) => {
+const countByType = async (  productId,  fileType) => {
     return prisma.document.count({
         where: {
             productId,
-            type,
+            fileType,
         },
     });
 };
@@ -97,7 +97,7 @@ const belongsToUser = async (  documentId,  userId) => {
 
 const documentStatistics = async (  userId) => {
     return prisma.document.groupBy({
-        by: ["type"],
+        by: ["fileType"],
 
         where: {
             product: {
