@@ -10,6 +10,7 @@ const userRepository = require("../src/modules/user/user.repository");
 const paymentRepository = require("../src/modules/payment/payment.repository");
 const paymentService = require("../src/modules/payment/payment.service");
 const stripe = require("../src/config/stripe");
+const prisma = require("../src/config/prisma");
 const { PLAN_CONFIG } = require("../src/constants/plans");
 
 const productPayload = {
@@ -253,6 +254,8 @@ test("subscription cancellation and reversal preserve access until period end", 
     assert.equal(resumed.scheduledPlan, null);
     assert.equal(resumed.cancelAtPeriodEnd, false);
     assert.equal(remoteRequests[1].cancel_at_period_end, false);
+    assert.equal(remoteRequests[1].items, undefined);
+    assert.equal(remoteRequests[1].proration_behavior, undefined);
 });
 
 test("paid upgrades return Stripe's payment page when customer action is required", async (t) => {
@@ -300,4 +303,94 @@ test("paid upgrades return Stripe's payment page when customer action is require
     assert.equal(result.paymentUrl, "https://invoice.test/pay");
     assert.equal(result.subscription.plan, "PLUS");
     assert.equal(saved.pendingPlan, "PRO");
+});
+
+test("invoice payment activates an upgrade only after Stripe uses the target plan price", async (t) => {
+    const originals = {
+        findWebhookEvent: paymentRepository.findWebhookEvent,
+        createWebhookEvent: paymentRepository.createWebhookEvent,
+        markWebhookEventProcessed: paymentRepository.markWebhookEventProcessed,
+        findSubscriptionByStripeId: paymentRepository.findSubscriptionByStripeId,
+        upsertInvoicePayment: paymentRepository.upsertInvoicePayment,
+        retrieveSubscription: stripe.subscriptions.retrieve,
+        updateSubscription: stripe.subscriptions.update,
+        subscriptionUpdate: prisma.subscription.update,
+        userUpdate: prisma.user.update,
+        transaction: prisma.$transaction,
+    };
+    const subscriptionWrites = [];
+    const userWrites = [];
+    const paymentWrites = [];
+    let remotePlan = "PLUS";
+
+    paymentRepository.findWebhookEvent = async () => null;
+    paymentRepository.createWebhookEvent = async () => ({});
+    paymentRepository.markWebhookEventProcessed = async () => ({});
+    paymentRepository.findSubscriptionByStripeId = async () => ({
+        id: "local-subscription",
+        userId: "user-id",
+        plan: "PLUS",
+        pendingPlan: "PRO",
+        scheduledPlan: null,
+        stripePriceId: "price_plus",
+        expiresAt: new Date("2026-09-01"),
+    });
+    paymentRepository.upsertInvoicePayment = async (payload) => {
+        paymentWrites.push(payload);
+        return payload;
+    };
+    stripe.subscriptions.retrieve = async () => ({
+        id: "sub_1",
+        status: "active",
+        metadata: { plan: "PLUS", effectivePlan: "PLUS" },
+        current_period_start: 1785542400,
+        current_period_end: 1788220800,
+        cancel_at_period_end: false,
+        items: { data: [{ id: "si_1", price: { id: `price_${remotePlan.toLowerCase()}`, metadata: { plan: remotePlan } } }] },
+    });
+    stripe.subscriptions.update = async () => ({});
+    prisma.subscription.update = (request) => {
+        subscriptionWrites.push(request);
+        return request;
+    };
+    prisma.user.update = (request) => {
+        userWrites.push(request);
+        return request;
+    };
+    prisma.$transaction = async (requests) => requests;
+
+    t.after(() => {
+        paymentRepository.findWebhookEvent = originals.findWebhookEvent;
+        paymentRepository.createWebhookEvent = originals.createWebhookEvent;
+        paymentRepository.markWebhookEventProcessed = originals.markWebhookEventProcessed;
+        paymentRepository.findSubscriptionByStripeId = originals.findSubscriptionByStripeId;
+        paymentRepository.upsertInvoicePayment = originals.upsertInvoicePayment;
+        stripe.subscriptions.retrieve = originals.retrieveSubscription;
+        stripe.subscriptions.update = originals.updateSubscription;
+        prisma.subscription.update = originals.subscriptionUpdate;
+        prisma.user.update = originals.userUpdate;
+        prisma.$transaction = originals.transaction;
+    });
+
+    const invoice = {
+        id: "in_upgrade",
+        billing_reason: "subscription_update",
+        subscription: "sub_1",
+        amount_paid: 1500,
+        currency: "usd",
+        payment_intent: "pi_upgrade",
+    };
+
+    await paymentService.processStripeEvent({ id: "evt_wrong_price", type: "invoice.paid", data: { object: invoice } });
+    assert.equal(subscriptionWrites.at(-1).data.plan, "PLUS");
+    assert.equal(subscriptionWrites.at(-1).data.pendingPlan, "PRO");
+    assert.equal(userWrites.at(-1).data.plan, "PLUS");
+    assert.equal(paymentWrites.at(-1).plan, "PLUS");
+
+    remotePlan = "PRO";
+    await paymentService.processStripeEvent({ id: "evt_target_price", type: "invoice.paid", data: { object: { ...invoice, id: "in_upgrade_paid" } } });
+    assert.equal(subscriptionWrites.at(-1).data.plan, "PRO");
+    assert.equal(subscriptionWrites.at(-1).data.pendingPlan, null);
+    assert.equal(userWrites.at(-1).data.plan, "PRO");
+    assert.equal(paymentWrites.at(-1).plan, "PRO");
 });
