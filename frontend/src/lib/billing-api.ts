@@ -6,7 +6,8 @@ async function request<T>(path: string, token: string, init?: RequestInit) {
   return apiRequest<T>(path, { ...init, cache: "no-store", token });
 }
 export type Subscription = { id: string; plan: UserPlan; scheduledPlan: UserPlan | null; pendingPlan: UserPlan | null; paymentUrl?: string | null; status: "ACTIVE" | "INCOMPLETE" | "PAST_DUE" | "EXPIRED" | "CANCELLED"; startsAt: string; expiresAt: string; currentPeriodStart: string | null; currentPeriodEnd: string | null; cancelAtPeriodEnd: boolean; cancelledAt: string | null; isActive: boolean } | null;
-export type Payment = { id: string; amount: string; currency: string; plan: UserPlan; status: string; createdAt: string };
+export type PaymentStatus = "PENDING" | "SUCCESS" | "FAILED" | "REFUNDED";
+export type Payment = { id: string; amount: string; currency: string; plan: UserPlan | null; status: PaymentStatus; createdAt: string };
 export const getSubscription = (token: string) => request<Subscription>("/payments/subscription", token);
 export const getPayments = (token: string) => apiRequestEnvelope<Payment[], PaginationMeta>("/payments?page=1&limit=20", { token, cache: "no-store" });
 export const createCheckout = (token: string, plan: "PLUS" | "PRO") => request<{ url: string }>("/payments/create-checkout", token, { method: "POST", body: JSON.stringify({ plan }) });
