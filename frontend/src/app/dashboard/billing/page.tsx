@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loading } from "@/components/ui/loading";
 import { plans, type UserPlan } from "@/constants/plans";
 import { useAuth } from "@/contexts/auth-context";
+import { getDashboard } from "@/lib/dashboard-api";
 import {
   cancelSubscription,
   changePlan,
@@ -34,24 +35,29 @@ export default function BillingPage() {
   const { firebaseUser, appUser, setCurrentAppUser } = useAuth();
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState<string | null>(null);
+
   const { data, isPending } = useQuery({
     queryKey: ["billing", firebaseUser?.uid],
     enabled: Boolean(firebaseUser),
     staleTime: 60_000,
     queryFn: async () => {
       const token = await firebaseUser!.getIdToken();
-      // Subscription reconciliation can create/update an invoice payment record,
-      // so history must be loaded after it completes.
       const subscription = await getSubscription(token);
       const history = await getPayments(token);
-      return { subscription, payments: history.data };
+      const dashboard = await getDashboard(token);
+      return { subscription, payments: history.data, dashboard };
     },
   });
 
   const subscription = data?.subscription ?? null;
   const payments = data?.payments ?? [];
+  const assetCount = data?.dashboard.products.total ?? 0;
   const currentPlan = subscription?.plan ?? appUser?.plan ?? "BASIC";
   const periodEnd = subscription?.currentPeriodEnd ?? subscription?.expiresAt;
+  const downgradePlan = subscription?.scheduledPlan === "BASIC" ? "BASIC" : null;
+  const downgradeLimit = downgradePlan ? plans[downgradePlan].assetLimit : null;
+  const downgradePlanName = downgradePlan ? plans[downgradePlan].name : null;
+  const overDowngradeLimit = Boolean(downgradeLimit && assetCount > downgradeLimit);
 
   useEffect(() => {
     if (appUser && appUser.plan !== currentPlan) setCurrentAppUser({ ...appUser, plan: currentPlan });
@@ -104,6 +110,7 @@ export default function BillingPage() {
     : subscription?.pendingPlan
       ? "Cancel pending upgrade"
       : "Keep current plan";
+
   return (
     <div className="mx-auto max-w-[1180px] pb-12">
       <header>
@@ -114,46 +121,183 @@ export default function BillingPage() {
 
       <section className="mt-6 flex flex-col justify-between gap-5 rounded-2xl border border-[#dedff0] bg-gradient-to-r from-white to-[#f3f1ff] p-6 shadow-[0_12px_35px_rgba(67,56,202,0.07)] sm:flex-row sm:items-center">
         <div className="flex items-center gap-4">
-          <span className={`flex h-12 w-12 items-center justify-center rounded-xl ${planTheme[currentPlan].iconBg} ${planTheme[currentPlan].accent}`}><CurrentIcon className="h-6 w-6" /></span>
+          <span className={`flex h-12 w-12 items-center justify-center rounded-xl ${planTheme[currentPlan].iconBg} ${planTheme[currentPlan].accent}`}>
+            <CurrentIcon className="h-6 w-6" />
+          </span>
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-[#737987]">Current plan</p>
             <h2 className="mt-1 text-2xl font-semibold text-[#172033]">{plans[currentPlan].name}</h2>
-            <p className="mt-1 text-sm text-[#687080]">Up to {plans[currentPlan].assetLimit} assets · ${plans[currentPlan].price}/month</p>
-            {subscription?.status === "PAST_DUE" && <p className="mt-2 text-sm font-medium text-[#ad2831]">Payment failed. Your access is temporarily preserved while payment is retried.</p>}
-            {subscription?.pendingPlan && <p className="mt-2 text-sm font-medium text-[#926300]">Your {plans[subscription.pendingPlan].name} upgrade is waiting for payment.</p>}
-            {subscription?.scheduledPlan && periodEnd && <p className="mt-2 text-sm font-medium text-[#5847e8]">{subscription.cancelAtPeriodEnd ? "Switching to Basic" : `Switching to ${plans[subscription.scheduledPlan].name}`} on {date.format(new Date(periodEnd))}.</p>}
+            <p className="mt-1 text-sm text-[#687080]">
+              Up to {plans[currentPlan].assetLimit} assets · ${plans[currentPlan].price}/month
+            </p>
+            {subscription?.status === "PAST_DUE" && (
+              <p className="mt-2 text-sm font-medium text-[#ad2831]">
+                Payment failed. Your access is temporarily preserved while payment is retried.
+              </p>
+            )}
+            {subscription?.pendingPlan && (
+              <p className="mt-2 text-sm font-medium text-[#926300]">
+                Your {plans[subscription.pendingPlan].name} upgrade is waiting for payment.
+              </p>
+            )}
+            {subscription?.scheduledPlan && periodEnd && (
+              <p className="mt-2 text-sm font-medium text-[#5847e8]">
+                {subscription.cancelAtPeriodEnd
+                  ? "Switching to Basic"
+                  : `Switching to ${plans[subscription.scheduledPlan].name}`}{" "}
+                on {date.format(new Date(periodEnd))}.
+              </p>
+            )}
+            {overDowngradeLimit && downgradeLimit && downgradePlanName && (
+              <div className="mt-3 rounded-xl border border-[#f0c36c] bg-[#fff8e8] px-4 py-3 text-sm text-[#7d4f00]">
+                <strong className="font-semibold">Heads up:</strong> switching to{" "}
+                {downgradePlanName} would leave you with {assetCount} assets over the{" "}
+                {downgradeLimit}-asset limit. You’ll need to reduce your assets or upgrade again to keep
+                adding more.
+              </div>
+            )}
           </div>
         </div>
-        {subscription && periodEnd && <div className="flex flex-wrap items-center gap-3">
-          <div className="rounded-xl bg-white/80 px-4 py-3 text-sm text-[#5d6472]"><span className="block text-xs font-semibold uppercase tracking-wide text-[#7b8190]">{subscription.cancelAtPeriodEnd ? "Access until" : "Next billing date"}</span><span className="mt-1 block font-medium text-[#273247]">{date.format(new Date(periodEnd))}</span></div>
-          {subscription.paymentUrl && <a href={subscription.paymentUrl} className="rounded-lg bg-[#5847e8] px-4 py-3 text-sm font-semibold text-white">Complete payment</a>}
-          {subscription.scheduledPlan || subscription.pendingPlan ? <button onClick={() => void updateSubscription("resume")} disabled={busy !== null} className="rounded-lg border border-[#cfc9ff] bg-white px-4 py-3 text-sm font-semibold text-[#5847e8] disabled:opacity-50">{resumeLabel}</button> : <button onClick={() => void updateSubscription("cancel")} disabled={busy !== null} className="rounded-lg border border-[#e1e4ed] bg-white px-4 py-3 text-sm font-semibold text-[#687080] disabled:opacity-50">Cancel plan</button>}
-        </div>}
+        {subscription && periodEnd && (
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="rounded-xl bg-white/80 px-4 py-3 text-sm text-[#5d6472]">
+              <span className="block text-xs font-semibold uppercase tracking-wide text-[#7b8190]">
+                {subscription.cancelAtPeriodEnd ? "Access until" : "Next billing date"}
+              </span>
+              <span className="mt-1 block font-medium text-[#273247]">{date.format(new Date(periodEnd))}</span>
+            </div>
+            {subscription.paymentUrl && (
+              <a href={subscription.paymentUrl} className="rounded-lg bg-[#5847e8] px-4 py-3 text-sm font-semibold text-white">
+                Complete payment
+              </a>
+            )}
+            {subscription.scheduledPlan || subscription.pendingPlan ? (
+              <button
+                onClick={() => void updateSubscription("resume")}
+                disabled={busy !== null}
+                className="rounded-lg border border-[#cfc9ff] bg-white px-4 py-3 text-sm font-semibold text-[#5847e8] disabled:opacity-50"
+              >
+                {resumeLabel}
+              </button>
+            ) : (
+              <button
+                onClick={() => void updateSubscription("cancel")}
+                disabled={busy !== null}
+                className="rounded-lg border border-[#e1e4ed] bg-white px-4 py-3 text-sm font-semibold text-[#687080] disabled:opacity-50"
+              >
+                Cancel plan
+              </button>
+            )}
+          </div>
+        )}
       </section>
 
       <section className="mt-6 grid gap-5 md:grid-cols-3">
         {(Object.keys(plans) as UserPlan[]).map((id) => {
-          const plan = plans[id]; const theme = planTheme[id]; const Icon = theme.icon; const active = id === currentPlan;
+          const plan = plans[id];
+          const theme = planTheme[id];
+          const Icon = theme.icon;
+          const active = id === currentPlan;
           const scheduled = subscription?.scheduledPlan === id;
-          return <article key={id} className={`relative flex min-h-72 flex-col rounded-2xl border bg-white p-6 shadow-[0_8px_24px_rgba(31,41,55,0.05)] transition ${active ? `${theme.border} ring-2 ring-[#5b47ee]/15` : "border-[#e1e4ed] hover:-translate-y-1 hover:border-[#cfc9ff]"}`}>
-            {active && <span className="absolute right-4 top-4 rounded-full bg-[#eeecff] px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#5847e8]">Your plan</span>}
-            <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${theme.iconBg} ${theme.accent}`}><Icon className="h-5 w-5" /></span>
-            <h2 className="mt-5 text-xl font-semibold text-[#172033]">{plan.name}</h2>
-            <p className="mt-2 text-3xl font-bold text-[#111d32]">${plan.price}<span className="text-sm font-normal text-[#737987]">/month</span></p>
-            <p className="mt-4 flex items-center gap-2 text-sm text-[#596170]"><Check className="h-4 w-4 text-[#5847e8]" />Store up to {plan.assetLimit} assets</p>
-            <div className="mt-auto pt-7">
-              {active ? <button disabled className="h-11 w-full rounded-lg bg-[#f0f2f7] text-sm font-semibold text-[#737987]">Current plan</button>
-                : currentPlan === "BASIC" && id !== "BASIC" ? <button onClick={() => void startCheckout(id)} disabled={busy !== null} className="h-11 w-full rounded-lg bg-[#5847e8] text-sm font-semibold text-white disabled:opacity-50">{busy === id ? "Opening checkout…" : `Upgrade to ${plan.name}`}</button>
-                : id === "BASIC" ? <button onClick={() => void updateSubscription("cancel")} disabled={busy !== null || subscription?.cancelAtPeriodEnd} className="h-11 w-full rounded-lg border border-[#dfe3eb] bg-white text-sm font-semibold text-[#526071] disabled:opacity-50">{subscription?.cancelAtPeriodEnd ? "Downgrade scheduled" : "Downgrade at renewal"}</button>
-                : <button onClick={() => void updateSubscription(id)} disabled={busy !== null || scheduled} className="h-11 w-full rounded-lg bg-[#5847e8] text-sm font-semibold text-white disabled:opacity-50">{scheduled ? "Change scheduled" : planRank[id] > planRank[currentPlan] ? `Upgrade to ${plan.name}` : `Switch to ${plan.name} at renewal`}</button>}
-            </div>
-          </article>;
+          const overLimitForPlan = assetCount > plan.assetLimit;
+
+          return (
+            <article
+              key={id}
+              className={`relative flex min-h-72 flex-col rounded-2xl border bg-white p-6 shadow-[0_8px_24px_rgba(31,41,55,0.05)] transition ${
+                active ? `${theme.border} ring-2 ring-[#5b47ee]/15` : "border-[#e1e4ed] hover:-translate-y-1 hover:border-[#cfc9ff]"
+              }`}
+            >
+              {active && (
+                <span className="absolute right-4 top-4 rounded-full bg-[#eeecff] px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#5847e8]">
+                  Your plan
+                </span>
+              )}
+              <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${theme.iconBg} ${theme.accent}`}>
+                <Icon className="h-5 w-5" />
+              </span>
+              <h2 className="mt-5 text-xl font-semibold text-[#172033]">{plan.name}</h2>
+              <p className="mt-2 text-3xl font-bold text-[#111d32]">
+                ${plan.price}
+                <span className="text-sm font-normal text-[#737987]">/month</span>
+              </p>
+              <p className="mt-4 flex items-center gap-2 text-sm text-[#596170]">
+                <Check className="h-4 w-4 text-[#5847e8]" />
+                Store up to {plan.assetLimit} assets
+              </p>
+              {overLimitForPlan && (
+                <p className="mt-3 text-sm font-medium text-[#ad2831]">
+                  You currently have {assetCount} assets, so this plan would be over the limit.
+                </p>
+              )}
+              <div className="mt-auto pt-7">
+                {active ? (
+                  <button disabled className="h-11 w-full rounded-lg bg-[#f0f2f7] text-sm font-semibold text-[#737987]">
+                    Current plan
+                  </button>
+                ) : currentPlan === "BASIC" && id !== "BASIC" ? (
+                  <button
+                    onClick={() => void startCheckout(id)}
+                    disabled={busy !== null}
+                    className="h-11 w-full rounded-lg bg-[#5847e8] text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    {busy === id ? "Opening checkout…" : `Upgrade to ${plan.name}`}
+                  </button>
+                ) : id === "BASIC" ? (
+                  <button
+                    onClick={() => void updateSubscription("cancel")}
+                    disabled={busy !== null || subscription?.cancelAtPeriodEnd}
+                    className="h-11 w-full rounded-lg border border-[#dfe3eb] bg-white text-sm font-semibold text-[#526071] disabled:opacity-50"
+                  >
+                    {subscription?.cancelAtPeriodEnd ? "Downgrade scheduled" : "Downgrade at renewal"}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => void updateSubscription(id)}
+                    disabled={busy !== null || scheduled}
+                    className="h-11 w-full rounded-lg bg-[#5847e8] text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    {scheduled
+                      ? "Change scheduled"
+                      : planRank[id] > planRank[currentPlan]
+                        ? `Upgrade to ${plan.name}`
+                        : `Switch to ${plan.name} at renewal`}
+                  </button>
+                )}
+              </div>
+            </article>
+          );
         })}
       </section>
 
       <section className="mt-7 overflow-hidden rounded-2xl border border-[#e1e4ed] bg-white shadow-[0_8px_24px_rgba(31,41,55,0.05)]">
-        <div className="flex items-center gap-3 border-b border-[#eceef4] px-6 py-5"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#efedff] text-[#5847e8]"><CreditCard className="h-4 w-4" /></span><div><h2 className="font-semibold text-[#172033]">Payment history</h2><p className="text-xs text-[#737987]">Your recent checkout activity</p></div></div>
-        {payments.length ? <div className="divide-y divide-[#eceef4]">{payments.map((payment) => <div key={payment.id} className="grid gap-3 px-6 py-4 text-sm sm:grid-cols-[1.2fr_1fr_1fr_auto] sm:items-center"><span className="text-[#4f5663]">{date.format(new Date(payment.createdAt))}</span><span className="font-medium text-[#273247]">{payment.plan ? plans[payment.plan].name : "Plan payment"}</span><span className="text-[#4f5663]">${Number(payment.amount).toFixed(2)} {payment.currency.toUpperCase()}</span><span className={`w-fit rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-wide ${statusStyle[payment.status] ?? statusStyle.PENDING}`}>{payment.status.toLowerCase()}</span></div>)}</div> : <p className="p-8 text-center text-sm text-[#687080]">No payments yet.</p>}
+        <div className="flex items-center gap-3 border-b border-[#eceef4] px-6 py-5">
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#efedff] text-[#5847e8]">
+            <CreditCard className="h-4 w-4" />
+          </span>
+          <div>
+            <h2 className="font-semibold text-[#172033]">Payment history</h2>
+            <p className="text-xs text-[#737987]">Your recent checkout activity</p>
+          </div>
+        </div>
+        {payments.length ? (
+          <div className="divide-y divide-[#eceef4]">
+            {payments.map((payment) => (
+              <div key={payment.id} className="grid gap-3 px-6 py-4 text-sm sm:grid-cols-[1.2fr_1fr_1fr_auto] sm:items-center">
+                <span className="text-[#4f5663]">{date.format(new Date(payment.createdAt))}</span>
+                <span className="font-medium text-[#273247]">{payment.plan ? plans[payment.plan].name : "Plan payment"}</span>
+                <span className="text-[#4f5663]">
+                  ${Number(payment.amount).toFixed(2)} {payment.currency.toUpperCase()}
+                </span>
+                <span className={`w-fit rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-wide ${statusStyle[payment.status] ?? statusStyle.PENDING}`}>
+                  {payment.status.toLowerCase()}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="p-8 text-center text-sm text-[#687080]">No payments yet.</p>
+        )}
       </section>
     </div>
   );
