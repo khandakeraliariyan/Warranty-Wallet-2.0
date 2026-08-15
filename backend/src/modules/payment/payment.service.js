@@ -18,6 +18,12 @@ const periodStart = (subscription) =>
     subscription.current_period_start || subscriptionItem(subscription)?.current_period_start;
 const periodEnd = (subscription) =>
     subscription.current_period_end || subscriptionItem(subscription)?.current_period_end;
+const subscriptionPrice = (subscription) => subscriptionItem(subscription)?.price;
+const subscriptionPlan = (subscription) => {
+    const price = subscriptionPrice(subscription);
+    const pricePlan = typeof price === "object" ? price?.metadata?.plan : null;
+    return pricePlan || subscription.metadata?.effectivePlan || subscription.metadata?.plan || null;
+};
 const localStatus = (status) => ({
     active: "ACTIVE",
     trialing: "ACTIVE",
@@ -287,9 +293,11 @@ const changePlan = async (user, targetPlan) => {
 const cancelSubscription = async (user) => {
     const local = await paymentRepository.findSubscription(user.id);
     if (!local?.stripeSubscriptionId || !local.isActive) throw new ApiError(409, "No active paid subscription was found.");
+    if (local.cancelAtPeriodEnd) throw new ApiError(409, "Cancellation is already scheduled.");
+    const current = await stripe.subscriptions.retrieve(local.stripeSubscriptionId);
     const remote = await stripe.subscriptions.update(local.stripeSubscriptionId, {
         cancel_at_period_end: true,
-        metadata: { plan: local.plan, scheduledPlan: PLAN.BASIC, effectivePlan: local.plan },
+        metadata: { ...current.metadata, plan: local.plan, scheduledPlan: PLAN.BASIC, effectivePlan: local.plan },
     });
     return paymentRepository.updateSubscription(user.id, {
         scheduledPlan: PLAN.BASIC,
@@ -304,20 +312,32 @@ const resumeSubscription = async (user) => {
     const local = await paymentRepository.findSubscription(user.id);
     if (!local?.stripeSubscriptionId || (!local.scheduledPlan && !local.pendingPlan)) throw new ApiError(409, "No pending plan change was found.");
     const remote = await stripe.subscriptions.retrieve(local.stripeSubscriptionId);
-    const item = subscriptionItem(remote);
-    const price = await createPlanPrice(remote, local.plan);
-    await stripe.subscriptions.update(local.stripeSubscriptionId, {
-        items: [{ id: item.id, price: price.id }],
-        proration_behavior: "none",
+    const update = {
         cancel_at_period_end: false,
-        metadata: { plan: local.plan, scheduledPlan: "", effectivePlan: local.plan },
-    });
+        metadata: { ...remote.metadata, plan: local.plan, scheduledPlan: "", effectivePlan: local.plan },
+    };
+
+    // Stopping cancellation does not change the subscription item. A scheduled
+    // downgrade or unpaid upgrade has changed (or attempted to change) its price,
+    // so only those branches restore the current plan without prorating.
+    if (!local.cancelAtPeriodEnd) {
+        const item = subscriptionItem(remote);
+        if (!item) throw new ApiError(409, "Stripe subscription has no billable item.");
+        const price = await createPlanPrice(remote, local.plan);
+        update.items = [{ id: item.id, price: price.id }];
+        update.proration_behavior = "none";
+    }
+
+    const updated = await stripe.subscriptions.update(local.stripeSubscriptionId, update);
+    const effectiveStatus = updated.status || remote.status || (local.isActive ? "active" : "canceled");
     return paymentRepository.updateSubscription(user.id, {
         scheduledPlan: null,
         pendingPlan: null,
-        stripePriceId: price.id,
+        stripePriceId: subscriptionPrice(updated)?.id || local.stripePriceId,
         cancelAtPeriodEnd: false,
         cancelledAt: null,
+        status: localStatus(effectiveStatus),
+        isActive: ["active", "trialing", "past_due"].includes(effectiveStatus),
     });
 };
 
@@ -359,10 +379,13 @@ const handleInvoicePaid = async (invoice) => {
     if (!subscriptionId) return;
     const localBefore = await paymentRepository.findSubscriptionByStripeId(subscriptionId);
     if (!localBefore) return;
-    const renewal = invoice.billing_reason === "subscription_cycle";
-    const paidPlan = localBefore.pendingPlan || null;
-    const effectivePlan = paidPlan || (renewal ? localBefore.scheduledPlan : null) || localBefore.plan;
     const remote = await stripe.subscriptions.retrieve(subscriptionId);
+    const renewal = invoice.billing_reason === "subscription_cycle";
+    const remotePlan = subscriptionPlan(remote);
+    const paidPlan = localBefore.pendingPlan && remotePlan === localBefore.pendingPlan
+        ? localBefore.pendingPlan
+        : null;
+    const effectivePlan = paidPlan || (renewal ? localBefore.scheduledPlan : null) || localBefore.plan;
     await synchronizeSubscription(remote, { renewal, paidPlan });
     if (paidPlan || (renewal && localBefore.scheduledPlan)) {
         await stripe.subscriptions.update(subscriptionId, {
@@ -473,9 +496,14 @@ const getSubscription = async (user) => {
     if (local?.stripeSubscriptionId) {
         try {
             const remote = await stripe.subscriptions.retrieve(local.stripeSubscriptionId, { expand: ["latest_invoice"] });
-            await synchronizeSubscription(remote);
-            const refreshed = await paymentRepository.findSubscription(user.id);
             const invoice = typeof remote.latest_invoice === "object" ? remote.latest_invoice : null;
+            const paidPendingUpgrade = local.pendingPlan
+                && !remote.pending_update
+                && invoice?.status === "paid"
+                && subscriptionPlan(remote) === local.pendingPlan;
+            if (paidPendingUpgrade) await handleInvoicePaid(invoice);
+            else await synchronizeSubscription(remote);
+            const refreshed = await paymentRepository.findSubscription(user.id);
             return {
                 ...refreshed,
                 paymentUrl: remote.pending_update ? invoice?.hosted_invoice_url || null : null,

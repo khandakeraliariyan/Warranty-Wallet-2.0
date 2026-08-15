@@ -88,7 +88,7 @@ export default function BillingPage() {
         }
       }
       await refresh();
-      toast.success(action === "cancel" ? "Cancellation scheduled" : action === "resume" ? "Subscription renewed" : "Plan change saved");
+      toast.success(action === "cancel" ? "Cancellation scheduled" : action === "resume" ? "Your current plan will continue" : "Plan change saved");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not update your subscription.");
     } finally {
@@ -99,6 +99,11 @@ export default function BillingPage() {
   if (isPending) return <Loading label="Loading your plan" />;
 
   const CurrentIcon = planTheme[currentPlan].icon;
+  const resumeLabel = subscription?.cancelAtPeriodEnd
+    ? "Continue subscription"
+    : subscription?.pendingPlan
+      ? "Cancel pending upgrade"
+      : "Keep current plan";
   return (
     <div className="mx-auto max-w-[1180px] pb-12">
       <header>
@@ -122,7 +127,7 @@ export default function BillingPage() {
         {subscription && periodEnd && <div className="flex flex-wrap items-center gap-3">
           <div className="rounded-xl bg-white/80 px-4 py-3 text-sm text-[#5d6472]"><span className="block text-xs font-semibold uppercase tracking-wide text-[#7b8190]">{subscription.cancelAtPeriodEnd ? "Access until" : "Next billing date"}</span><span className="mt-1 block font-medium text-[#273247]">{date.format(new Date(periodEnd))}</span></div>
           {subscription.paymentUrl && <a href={subscription.paymentUrl} className="rounded-lg bg-[#5847e8] px-4 py-3 text-sm font-semibold text-white">Complete payment</a>}
-          {subscription.scheduledPlan || subscription.pendingPlan ? <button onClick={() => void updateSubscription("resume")} disabled={busy !== null} className="rounded-lg border border-[#cfc9ff] bg-white px-4 py-3 text-sm font-semibold text-[#5847e8] disabled:opacity-50">Keep current plan</button> : <button onClick={() => void updateSubscription("cancel")} disabled={busy !== null} className="rounded-lg border border-[#e1e4ed] bg-white px-4 py-3 text-sm font-semibold text-[#687080] disabled:opacity-50">Cancel plan</button>}
+          {subscription.scheduledPlan || subscription.pendingPlan ? <button onClick={() => void updateSubscription("resume")} disabled={busy !== null} className="rounded-lg border border-[#cfc9ff] bg-white px-4 py-3 text-sm font-semibold text-[#5847e8] disabled:opacity-50">{resumeLabel}</button> : <button onClick={() => void updateSubscription("cancel")} disabled={busy !== null} className="rounded-lg border border-[#e1e4ed] bg-white px-4 py-3 text-sm font-semibold text-[#687080] disabled:opacity-50">Cancel plan</button>}
         </div>}
       </section>
 

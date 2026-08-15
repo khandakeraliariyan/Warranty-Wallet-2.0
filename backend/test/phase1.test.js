@@ -10,6 +10,7 @@ const userRepository = require("../src/modules/user/user.repository");
 const paymentRepository = require("../src/modules/payment/payment.repository");
 const paymentService = require("../src/modules/payment/payment.service");
 const stripe = require("../src/config/stripe");
+const prisma = require("../src/config/prisma");
 const { PLAN_CONFIG } = require("../src/constants/plans");
 
 const productPayload = {
@@ -253,6 +254,8 @@ test("subscription cancellation and reversal preserve access until period end", 
     assert.equal(resumed.scheduledPlan, null);
     assert.equal(resumed.cancelAtPeriodEnd, false);
     assert.equal(remoteRequests[1].cancel_at_period_end, false);
+    assert.equal(remoteRequests[1].items, undefined);
+    assert.equal(remoteRequests[1].proration_behavior, undefined);
 });
 
 test("paid upgrades return Stripe's payment page when customer action is required", async (t) => {
