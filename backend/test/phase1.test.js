@@ -305,6 +305,58 @@ test("paid upgrades return Stripe's payment page when customer action is require
     assert.equal(saved.pendingPlan, "PRO");
 });
 
+test("upgrade clears a scheduled cancellation before changing the subscription", async (t) => {
+    const originalFind = paymentRepository.findSubscription;
+    const originalUpdate = paymentRepository.updateSubscription;
+    const originalReusablePrice = paymentRepository.findReusablePlanPrice;
+    const originalRetrieveSubscription = stripe.subscriptions.retrieve;
+    const originalUpdateRemote = stripe.subscriptions.update;
+    const originalCreatePrice = stripe.prices.create;
+    const local = {
+        userId: "user-id",
+        plan: "PLUS",
+        isActive: true,
+        cancelAtPeriodEnd: true,
+        stripeSubscriptionId: "sub_1",
+    };
+    const remoteRequests = [];
+    let saved;
+
+    paymentRepository.findSubscription = async () => ({ ...local, ...saved });
+    paymentRepository.updateSubscription = async (_userId, payload) => {
+        saved = { ...saved, ...payload };
+        return { ...local, ...saved };
+    };
+    paymentRepository.findReusablePlanPrice = async () => null;
+    stripe.prices.create = async () => ({ id: "price_pro" });
+    stripe.subscriptions.retrieve = async () => ({
+        id: "sub_1",
+        metadata: { plan: "PLUS" },
+        cancel_at_period_end: true,
+        items: { data: [{ id: "si_1", price: { product: "prod_1" } }] },
+    });
+    stripe.subscriptions.update = async (_id, payload) => {
+        remoteRequests.push(payload);
+        return payload.items
+            ? { pending_update: { expires_at: 1 }, latest_invoice: { hosted_invoice_url: "https://invoice.test/pay" } }
+            : { status: "active", items: { data: [{ price: { id: "price_plus" } }] } };
+    };
+
+    t.after(() => {
+        paymentRepository.findSubscription = originalFind;
+        paymentRepository.updateSubscription = originalUpdate;
+        paymentRepository.findReusablePlanPrice = originalReusablePrice;
+        stripe.subscriptions.retrieve = originalRetrieveSubscription;
+        stripe.subscriptions.update = originalUpdateRemote;
+        stripe.prices.create = originalCreatePrice;
+    });
+
+    const result = await paymentService.changePlan({ id: "user-id" }, "PRO");
+    assert.equal(remoteRequests[0].cancel_at_period_end, false);
+    assert.equal(remoteRequests[1].items[0].price, "price_pro");
+    assert.equal(result.paymentUrl, "https://invoice.test/pay");
+});
+
 test("plan price reuse is rejected when Stripe product does not match the active subscription", async (t) => {
     const originalFind = paymentRepository.findSubscription;
     const originalUpdate = paymentRepository.updateSubscription;

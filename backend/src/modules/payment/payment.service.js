@@ -199,6 +199,18 @@ const createPlanPrice = async (stripeSubscription, plan) => {
     });
 };
 
+const clearScheduledCancellation = async (remote, userId, currentPlan) => {
+    if (!remote.cancel_at_period_end) return;
+    await stripe.subscriptions.update(remote.id, {
+        cancel_at_period_end: false,
+        metadata: { ...remote.metadata, plan: currentPlan, scheduledPlan: "", effectivePlan: currentPlan },
+    });
+    await paymentRepository.updateSubscription(userId, {
+        cancelAtPeriodEnd: false,
+        scheduledPlan: null,
+    });
+};
+
 const changePlan = async (user, targetPlan) => {
     const local = await paymentRepository.findSubscription(user.id);
     if (!local?.stripeSubscriptionId || !local.isActive) {
@@ -214,6 +226,7 @@ const changePlan = async (user, targetPlan) => {
     const isUpgrade = PLAN_CONFIG[targetPlan].price > PLAN_CONFIG[local.plan].price;
 
     if (isUpgrade) {
+        await clearScheduledCancellation(remote, user.id, local.plan);
         await paymentRepository.updateSubscription(user.id, {
             pendingPlan: targetPlan,
             scheduledPlan: null,
@@ -226,6 +239,7 @@ const changePlan = async (user, targetPlan) => {
                 items: [{ id: item.id, price: price.id }],
                 proration_behavior: "always_invoice",
                 payment_behavior: "pending_if_incomplete",
+                cancel_at_period_end: false,
                 expand: ["latest_invoice"],
             });
         } catch (error) {
