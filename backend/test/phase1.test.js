@@ -275,7 +275,7 @@ test("paid upgrades return Stripe's payment page when customer action is require
         return { ...local, ...payload };
     };
     paymentRepository.findReusablePlanPrice = async () => ({ stripePriceId: "price_pro" });
-    stripe.prices.retrieve = async () => ({ id: "price_pro", active: true, unit_amount: 2000, currency: "usd" });
+    stripe.prices.retrieve = async () => ({ id: "price_pro", active: true, unit_amount: 2000, currency: "usd", product: "prod_1" });
     stripe.subscriptions.retrieve = async () => ({
         id: "sub_1",
         metadata: { plan: "PLUS" },
@@ -300,4 +300,106 @@ test("paid upgrades return Stripe's payment page when customer action is require
     assert.equal(result.paymentUrl, "https://invoice.test/pay");
     assert.equal(result.subscription.plan, "PLUS");
     assert.equal(saved.pendingPlan, "PRO");
+});
+
+test("plan price reuse is rejected when Stripe product does not match the active subscription", async (t) => {
+    const originalFind = paymentRepository.findSubscription;
+    const originalUpdate = paymentRepository.updateSubscription;
+    const originalRetrieveSubscription = stripe.subscriptions.retrieve;
+    const originalUpdateRemote = stripe.subscriptions.update;
+    const originalCreatePrice = stripe.prices.create;
+    const originalReusablePrice = paymentRepository.findReusablePlanPrice;
+    const originalRetrievePrice = stripe.prices.retrieve;
+    const local = {
+        userId: "user-id",
+        plan: "PLUS",
+        isActive: true,
+        stripeSubscriptionId: "sub_1",
+    };
+    let createdPrice;
+    let remoteUpdate;
+    paymentRepository.findSubscription = async () => local;
+    paymentRepository.updateSubscription = async (_userId, payload) => ({ ...local, ...payload });
+    paymentRepository.findReusablePlanPrice = async () => ({ stripePriceId: "price_pro" });
+    stripe.prices.retrieve = async () => ({ id: "price_pro", active: true, unit_amount: 2000, currency: "usd", product: "prod_other" });
+    stripe.prices.create = async (payload) => {
+        createdPrice = payload;
+        return { id: "price_new" };
+    };
+    stripe.subscriptions.retrieve = async () => ({
+        id: "sub_1",
+        metadata: { plan: "PLUS" },
+        items: { data: [{ id: "si_1", price: { product: "prod_1" } }] },
+    });
+    stripe.subscriptions.update = async (_id, payload) => {
+        remoteUpdate = payload;
+        return { pending_update: { expires_at: 1 }, latest_invoice: { hosted_invoice_url: "https://invoice.test/pay" } };
+    };
+
+    t.after(() => {
+        paymentRepository.findSubscription = originalFind;
+        paymentRepository.updateSubscription = originalUpdate;
+        stripe.subscriptions.retrieve = originalRetrieveSubscription;
+        stripe.subscriptions.update = originalUpdateRemote;
+        stripe.prices.create = originalCreatePrice;
+        paymentRepository.findReusablePlanPrice = originalReusablePrice;
+        stripe.prices.retrieve = originalRetrievePrice;
+    });
+
+    const result = await paymentService.changePlan({ id: "user-id" }, "PRO");
+    assert.equal(result.paymentUrl, "https://invoice.test/pay");
+    assert.equal(createdPrice.nickname, "Warranty Wallet Pro");
+    assert.equal(remoteUpdate.items[0].price, "price_new");
+});
+
+test("failed upgrade invoices still mark the subscription as past due", async (t) => {
+    const originalFindWebhookEvent = paymentRepository.findWebhookEvent;
+    const originalCreateWebhookEvent = paymentRepository.createWebhookEvent;
+    const originalMarkWebhookEventProcessed = paymentRepository.markWebhookEventProcessed;
+    const originalFindSubscriptionByStripeId = paymentRepository.findSubscriptionByStripeId;
+    const originalUpsertInvoicePayment = paymentRepository.upsertInvoicePayment;
+    const originalUpdateSubscription = paymentRepository.updateSubscription;
+
+    let subscriptionUpdate;
+    paymentRepository.findWebhookEvent = async () => null;
+    paymentRepository.createWebhookEvent = async () => null;
+    paymentRepository.markWebhookEventProcessed = async () => null;
+    paymentRepository.findSubscriptionByStripeId = async () => ({
+        id: "subscription-id",
+        userId: "user-id",
+        plan: "PLUS",
+        pendingPlan: "PRO",
+        scheduledPlan: null,
+        stripeSubscriptionId: "sub_1",
+    });
+    paymentRepository.upsertInvoicePayment = async () => null;
+    paymentRepository.updateSubscription = async (_userId, payload) => {
+        subscriptionUpdate = payload;
+        return payload;
+    };
+
+    t.after(() => {
+        paymentRepository.findWebhookEvent = originalFindWebhookEvent;
+        paymentRepository.createWebhookEvent = originalCreateWebhookEvent;
+        paymentRepository.markWebhookEventProcessed = originalMarkWebhookEventProcessed;
+        paymentRepository.findSubscriptionByStripeId = originalFindSubscriptionByStripeId;
+        paymentRepository.upsertInvoicePayment = originalUpsertInvoicePayment;
+        paymentRepository.updateSubscription = originalUpdateSubscription;
+    });
+
+    await paymentService.processStripeEvent({
+        id: "evt_failed_upgrade",
+        type: "invoice.payment_failed",
+        data: {
+            object: {
+                subscription: "sub_1",
+                payment_intent: "pi_1",
+                amount_due: 500,
+                currency: "usd",
+            },
+        },
+    });
+
+    assert.equal(subscriptionUpdate.status, "PAST_DUE");
+    assert.equal(subscriptionUpdate.isActive, true);
 });
