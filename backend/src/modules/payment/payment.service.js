@@ -171,7 +171,15 @@ const createPlanPrice = async (stripeSubscription, plan) => {
     if (reusable?.stripePriceId) {
         try {
             const price = await stripe.prices.retrieve(reusable.stripePriceId);
-            if (price.active && price.unit_amount === PLAN_CONFIG[plan].price * 100 && price.currency === CURRENCY) {
+            const reusableProductId = typeof price.product === "string" ? price.product : price.product?.id;
+            const currentProductId = subscriptionItem(stripeSubscription)?.price?.product;
+            if (
+                price.active
+                && price.unit_amount === PLAN_CONFIG[plan].price * 100
+                && price.currency === CURRENCY
+                && reusableProductId
+                && reusableProductId === currentProductId
+            ) {
                 return price;
             }
         } catch {
@@ -418,9 +426,10 @@ const handleInvoiceFailed = async (invoice) => {
         plan: local.pendingPlan || local.scheduledPlan || local.plan,
         status: "FAILED",
     });
-    if (!local.pendingPlan) {
-        await paymentRepository.updateSubscription(local.userId, { status: "PAST_DUE", isActive: true });
-    }
+    await paymentRepository.updateSubscription(local.userId, {
+        status: "PAST_DUE",
+        isActive: true,
+    });
 };
 
 const handleCheckoutExpired = async (session) => {
