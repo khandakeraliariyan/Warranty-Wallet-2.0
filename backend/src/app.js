@@ -55,14 +55,17 @@ app.use(express.urlencoded({
 
 app.use(cookieParser());
 
-app.get("/api/v1/health", (req, res) => {
+const healthResponse = (req, res) => {
     res.status(200).json({
         success: true,
         message: "Warranty Wallet API is healthy.",
         environment: env.NODE_ENV || "development",
         timestamp: new Date().toISOString(),
     });
-});
+};
+
+app.get("/health", healthResponse);
+app.get("/api/v1/health", healthResponse);
 
 const cronRoutes = require("./routes/cron.route");
 

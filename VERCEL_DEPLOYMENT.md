@@ -24,6 +24,7 @@ same Git branch, but each one has a different root directory.
 7. Deploy and verify:
 
    ```text
+   https://YOUR-BACKEND.vercel.app/health
    https://YOUR-BACKEND.vercel.app/api/v1/health
    ```
 
@@ -92,4 +93,3 @@ Test in this order:
 Vercel Functions allow a maximum request body of 4.5 MB. The application limits
 documents to 4 MB and sends multi-file selections as individual requests. Files
 larger than 4 MB will require a future direct-to-Cloudinary signed upload flow.
-
