@@ -40,13 +40,15 @@ export default function LandingPage() {
         <div className="flex w-full justify-center lg:w-1/2 lg:justify-end"><div className="relative aspect-[4/3] w-full max-w-[560px] overflow-hidden rounded-2xl border border-[#dce9ff] bg-[#e5eeff] shadow-[0_24px_60px_rgba(11,28,48,.18)]"><Image src="/assets/banner-image.png" alt="Modern home workspace with warranty dashboard" fill sizes="(max-width: 1024px) 100vw, 50vw" className="object-cover" priority /></div></div>
       </section>
 
-      <section id="features" className="mx-auto w-11/12 max-w-[1440px] py-12">
+      <section id="features" className="bg-white">
+        <div className="mx-auto w-11/12 max-w-[1440px] py-12">
         <div className="mb-10 text-center"><h2 className="text-3xl font-semibold tracking-[-.02em] text-[#0b1c30]">Intelligent Warranty Management</h2><p className="mx-auto mt-2 max-w-4xl text-sm text-[#45464d] sm:whitespace-nowrap">Everything you need to keep track of your valuable purchases, automated for your peace of mind.</p></div>
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3 [&>article]:border-[#d9def5] [&>article]:bg-[#f5f6ff] [&>article]:shadow-[0_4px_14px_rgba(37,48,84,.06)]">
           <article className="relative overflow-hidden rounded-2xl border border-[#d3e4fe] bg-white p-8 shadow-sm md:col-span-2"><FeatureIcon name="scan" purple /><h3 className="mb-2 text-2xl font-semibold">AI-Powered Document Scanning</h3><p className="mb-6 max-w-xl leading-6 text-[#45464d]">Upload a receipt, invoice, or warranty card. Our AI extracts the product details, purchase date, price, seller, and warranty information for your review.</p><div className="flex items-center gap-4 rounded-xl border border-[#c6c6cd] bg-[#f8f9ff] p-4"><div className="relative flex h-20 w-16 shrink-0 items-center justify-center overflow-hidden rounded border border-[#c6c6cd] bg-[#dce9ff]"><Icon name="receipt" className="h-7 w-7 text-[#45464d]" /><div className="scan-line absolute left-0 top-0 h-0.5 w-full bg-[#4b41e1] shadow-[0_0_8px_#4b41e1]" /></div><div className="flex min-w-0 flex-1 flex-col gap-2"><div className="h-3 w-3/4 rounded bg-[#d3e4fe]" /><div className="h-3 w-1/2 rounded bg-[#d3e4fe]" /><div className="mt-1 flex flex-wrap gap-1.5">{["PRODUCT", "BRAND", "MODEL", "SERIAL", "CATEGORY", "DATE", "PRICE", "SELLER", "INVOICE", "WARRANTY"].map((field) => <span key={field} className="rounded bg-[#e2dfff] px-2 py-1 text-[9px] font-bold text-[#4b41e1]">{field} FOUND</span>)}</div></div></div></article>
           <article className="flex flex-col rounded-2xl border border-[#d3e4fe] bg-white p-8 shadow-sm"><FeatureIcon name="calendar" /><h3 className="mb-2 text-lg font-semibold">Proactive Alerts</h3><p className="flex-1 leading-6 text-[#45464d]">Never let a warranty slip away. Get notified 30, 14, and 3 days before expiration via email or push notification.</p><div className="mt-6 rounded-lg border border-[#efb8bd] bg-[#fff1f2] p-3 shadow-[0_2px_8px_rgba(186,26,26,.06)]"><div className="flex items-center gap-2 text-xs font-semibold text-[#a81414]"><Icon name="warning" className="h-4 w-4 text-[#ba1a1a]" />Expiring Soon</div><p className="mt-2 text-sm text-[#7d2b32]">Sony Headphones coverage ends in 14 days.</p></div></article>
           <article className="rounded-2xl border border-[#d3e4fe] bg-white p-8 shadow-sm"><FeatureIcon name="vault" /><h3 className="mb-2 text-lg font-semibold">Centralized Vault</h3><p className="leading-6 text-[#45464d]">Store manuals, receipts, and warranty documents in one secure place. Accessible anywhere, anytime.</p></article>
           <article id="how-it-works" className="flex flex-col items-center gap-6 rounded-2xl border border-[#d3e4fe] bg-white p-8 shadow-sm md:col-span-2 md:flex-row"><div className="flex-1"><FeatureIcon name="support" /><h3 className="mb-2 text-2xl font-semibold">One-Click Claim Initiation</h3><p className="leading-6 text-[#45464d]">When something breaks, we gather all the necessary documentation into a single packet and provide the manufacturer&apos;s direct contact flow.</p></div><div className="relative flex aspect-square w-full items-center justify-center rounded-xl border border-[#c6c6cd] bg-[#f8f9ff] md:w-64"><div className="absolute h-40 w-32 rotate-3 rounded border border-[#d3e4fe] bg-[#eff4ff] shadow-sm" /><div className="relative z-10 flex h-40 w-32 -rotate-6 flex-col gap-2 rounded border border-[#dce9ff] bg-white p-3 shadow-md"><div className="h-2 rounded bg-[#d3e4fe]" /><div className="h-2 w-3/4 rounded bg-[#d3e4fe]" /><span className="mt-auto ml-auto flex h-8 w-8 items-center justify-center rounded-full bg-[#645efb] text-white"><Icon name="check" className="h-4 w-4" /></span></div></div></article>
+        </div>
         </div>
       </section>
 
@@ -83,8 +85,9 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className="mx-auto w-11/12 max-w-[1440px] py-16">
-        <div className="relative isolate overflow-hidden rounded-[32px] border border-[#7569ff] bg-[#111a31] px-6 py-8 text-white shadow-[0_28px_80px_rgba(15,24,50,.22)] sm:px-10 sm:py-12 lg:px-14">
+      <section className="bg-white">
+        <div className="mx-auto w-11/12 max-w-[1440px] py-16">
+          <div className="relative isolate overflow-hidden rounded-[32px] border border-[#7569ff] bg-[#111a31] px-6 py-8 text-white shadow-[0_28px_80px_rgba(15,24,50,.22)] sm:px-10 sm:py-12 lg:px-14">
           <div className="pointer-events-none absolute -right-24 -top-32 -z-10 h-96 w-96 rounded-full bg-[#645efb]/35 blur-3xl"/>
           <div className="pointer-events-none absolute -bottom-40 left-1/4 -z-10 h-80 w-80 rounded-full bg-[#3f8cff]/20 blur-3xl"/>
           <div className="pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(120deg,rgba(255,255,255,.045)_1px,transparent_1px)] bg-[size:28px_28px] [mask-image:linear-gradient(to_right,black,transparent)]"/>
@@ -107,6 +110,7 @@ export default function LandingPage() {
               <Link href="/register" className="mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-[#191342] shadow-lg transition hover:bg-[#eeeaff] active:scale-[.99]">Create your free wallet <Icon name="arrow" className="h-4 w-4"/></Link>
               <p className="mt-3 text-center text-[11px] text-[#9da6bb]">Free for up to {plans.BASIC.assetLimit} assets · No credit card required</p>
             </div>
+          </div>
           </div>
         </div>
       </section>
