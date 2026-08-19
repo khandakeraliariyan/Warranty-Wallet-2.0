@@ -1,4 +1,5 @@
 "use client";
+
 import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { Loading } from "@/components/ui/loading";
@@ -7,11 +8,165 @@ import { useAuth } from "@/contexts/auth-context";
 import { getAdminPayments, type AdminPayment, type Meta } from "@/lib/admin-api";
 import { toast } from "@/lib/notifications";
 import { readQuery, replaceQuery } from "@/lib/url-query";
+
+const allowedSorts = ["createdAt", "amount", "status", "plan"] as const;
+const allowedStatuses = ["PENDING", "SUCCESS", "FAILED", "REFUNDED"] as const;
+
+const readPaymentStatus = () => {
+  const value = readQuery("status");
+  return allowedStatuses.includes(value as (typeof allowedStatuses)[number]) ? value : "";
+};
+
+const readPaymentSort = () => {
+  const value = readQuery("sort", "createdAt:desc");
+  const [sortBy, sortOrder] = value.split(":");
+  return allowedSorts.includes(sortBy as (typeof allowedSorts)[number]) && (sortOrder === "asc" || sortOrder === "desc")
+    ? value
+    : "createdAt:desc";
+};
+
 export default function AdminPaymentsPage() {
-  const { firebaseUser } = useAuth(); const [payments, setPayments] = useState<AdminPayment[]>([]); const [meta, setMeta] = useState<Meta | null>(null); const [search, setSearch] = useState(() => readQuery("search")); const [status, setStatus] = useState(() => readQuery("status")); const [sort, setSort] = useState(() => readQuery("sort", "createdAt:desc")); const [page, setPage] = useState(() => Number(readQuery("page", "1")) || 1); const [loading, setLoading] = useState(true);
-  useEffect(() => { if (!firebaseUser) return; const [sortBy, sortOrder] = sort.split(":"); const timer = setTimeout(() => { setLoading(true); firebaseUser.getIdToken().then((token) => getAdminPayments(token, { page, limit: 20, search, status, sortBy, sortOrder })).then((result) => { setPayments(result.data); setMeta(result.meta); }).catch((error) => toast.error(error.message)).finally(() => setLoading(false)); }, 250); return () => clearTimeout(timer); }, [firebaseUser, page, search, sort, status]);
+  const { firebaseUser } = useAuth();
+  const [payments, setPayments] = useState<AdminPayment[]>([]);
+  const [meta, setMeta] = useState<Meta | null>(null);
+  const [search, setSearch] = useState(() => readQuery("search"));
+  const [status, setStatus] = useState(readPaymentStatus);
+  const [sort, setSort] = useState(readPaymentSort);
+  const [page, setPage] = useState(() => Math.max(1, Number(readQuery("page", "1")) || 1));
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!firebaseUser) return;
+    const [rawSortBy, rawSortOrder] = sort.split(":");
+    const sortBy = (allowedSorts.includes(rawSortBy as (typeof allowedSorts)[number]) ? rawSortBy : "createdAt") as (typeof allowedSorts)[number];
+    const sortOrder = rawSortOrder === "asc" ? "asc" : "desc";
+    const timer = setTimeout(() => {
+      setLoading(true);
+      setError("");
+      firebaseUser.getIdToken()
+        .then((token) => getAdminPayments(token, { page, limit: 20, search, status, sortBy, sortOrder }))
+        .then((result) => {
+          setPayments(result.data);
+          setMeta(result.meta);
+        })
+        .catch((loadError) => {
+          const message = loadError instanceof Error ? loadError.message : "Could not load payments.";
+          setPayments([]);
+          setMeta(null);
+          setError(message);
+          toast.error(message);
+        })
+        .finally(() => setLoading(false));
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [firebaseUser, page, search, sort, status]);
+
   useEffect(() => replaceQuery({ search, status, sort, page }), [page, search, sort, status]);
+
   const total = useMemo(() => payments.filter((item) => item.status === "SUCCESS").reduce((sum, item) => sum + Number(item.amount), 0), [payments]);
-  return <div className="mx-auto max-w-[1440px] pb-10"><AdminPageHeader title="Payments & subscriptions" description="Monitor checkout outcomes and subscription revenue."/><section className={`${adminCard} mt-6 grid gap-3 p-4 lg:grid-cols-[1fr_auto_auto]`}><label className="relative"><Search className="absolute left-3 top-3 h-5 w-5 text-[#858b98]"/><input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Search customer, email, or transaction" className={`${adminInput} w-full pl-10`}/></label><select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className={adminInput}><option value="">All statuses</option><option value="PENDING">Pending</option><option value="SUCCESS">Successful</option><option value="FAILED">Failed</option><option value="REFUNDED">Refunded</option></select><select value={sort} onChange={(e) => { setSort(e.target.value); setPage(1); }} className={adminInput}><option value="createdAt:desc">Newest first</option><option value="createdAt:asc">Oldest first</option><option value="amount:desc">Highest amount</option><option value="amount:asc">Lowest amount</option><option value="plan:asc">Plan A–Z</option></select></section><div className="mt-5 grid gap-4 sm:grid-cols-3"><Card label="Transactions" value={meta?.total ?? 0}/><Card label="Visible revenue" value={`$${total.toFixed(2)}`}/><Card label="Successful on page" value={payments.filter((item) => item.status === "SUCCESS").length}/></div>{loading ? <Loading fullScreen={false}/> : payments.length === 0 ? <AdminEmpty title="No payments found" description="No transactions match these filters."/> : <AdminTable><AdminTableHead><th className="px-5 py-4">Customer</th><th className="px-4 py-4">Plan</th><th className="px-4 py-4">Amount</th><th className="px-4 py-4">Status</th><th className="px-5 py-4">Date</th></AdminTableHead><tbody className="divide-y divide-[#edf0f5]">{payments.map((payment) => <tr key={payment.id}><td className="px-5 py-4"><p className="font-semibold">{payment.user.name}</p><p className="text-xs text-[#747b89]">{payment.user.email}</p></td><td className="px-4 py-4"><AdminBadge tone={payment.plan === "PRO" ? "primary" : payment.plan === "PLUS" ? "warning" : "neutral"}>{payment.plan || "—"}</AdminBadge></td><td className="px-4 py-4 font-semibold">${Number(payment.amount).toFixed(2)} {payment.currency.toUpperCase()}</td><td className="px-4 py-4"><AdminBadge tone={payment.status === "SUCCESS" ? "success" : payment.status === "FAILED" ? "danger" : payment.status === "PENDING" ? "warning" : "neutral"}>{payment.status}</AdminBadge></td><td className="px-5 py-4">{new Date(payment.createdAt).toLocaleString()}</td></tr>)}</tbody></AdminTable>}<AdminPagination page={page} totalPages={meta?.totalPages ?? 1} onChange={setPage}/></div>;
+
+  return (
+    <div className="mx-auto max-w-[1440px] pb-10">
+      <AdminPageHeader title="Payments & subscriptions" description="Monitor checkout outcomes and subscription revenue." />
+      <section className={`${adminCard} mt-6 grid gap-3 p-4 lg:grid-cols-[1fr_auto_auto]`}>
+        <label className="relative">
+          <Search className="absolute left-3 top-3 h-5 w-5 text-[#858b98]" />
+          <input
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            placeholder="Search customer, email, or transaction"
+            className={`${adminInput} w-full pl-10`}
+          />
+        </label>
+        <select
+          value={status}
+          onChange={(e) => {
+            setStatus(e.target.value);
+            setPage(1);
+          }}
+          className={adminInput}
+        >
+          <option value="">All statuses</option>
+          <option value="PENDING">Pending</option>
+          <option value="SUCCESS">Successful</option>
+          <option value="FAILED">Failed</option>
+          <option value="REFUNDED">Refunded</option>
+        </select>
+        <select
+          value={sort}
+          onChange={(e) => {
+            setSort(e.target.value);
+            setPage(1);
+          }}
+          className={adminInput}
+        >
+          <option value="createdAt:desc">Newest first</option>
+          <option value="createdAt:asc">Oldest first</option>
+          <option value="amount:desc">Highest amount</option>
+          <option value="amount:asc">Lowest amount</option>
+          <option value="plan:asc">Plan A-Z</option>
+        </select>
+      </section>
+
+      <div className="mt-5 grid gap-4 sm:grid-cols-3">
+        <Card label="Transactions" value={meta?.total ?? 0} />
+        <Card label="Visible revenue" value={`$${total.toFixed(2)}`} />
+        <Card label="Successful on page" value={payments.filter((item) => item.status === "SUCCESS").length} />
+      </div>
+
+      {loading ? (
+        <Loading fullScreen={false} />
+      ) : error ? (
+        <AdminEmpty title="Payments could not be loaded" description={error} />
+      ) : payments.length === 0 ? (
+        <AdminEmpty title="No payments found" description="No transactions match these filters." />
+      ) : (
+        <AdminTable>
+          <AdminTableHead>
+            <th className="px-5 py-4">Customer</th>
+            <th className="px-4 py-4">Plan</th>
+            <th className="px-4 py-4">Amount</th>
+            <th className="px-4 py-4">Status</th>
+            <th className="px-5 py-4">Date</th>
+          </AdminTableHead>
+          <tbody className="divide-y divide-[#edf0f5]">
+            {payments.map((payment) => (
+              <tr key={payment.id}>
+                <td className="px-5 py-4">
+                  <p className="font-semibold">{payment.user.name}</p>
+                  <p className="text-xs text-[#747b89]">{payment.user.email}</p>
+                </td>
+                <td className="px-4 py-4">
+                  <AdminBadge tone={payment.plan === "PRO" ? "primary" : payment.plan === "PLUS" ? "warning" : "neutral"}>{payment.plan || "—"}</AdminBadge>
+                </td>
+                <td className="px-4 py-4 font-semibold">
+                  ${Number(payment.amount).toFixed(2)} {payment.currency.toUpperCase()}
+                </td>
+                <td className="px-4 py-4">
+                  <AdminBadge tone={payment.status === "SUCCESS" ? "success" : payment.status === "FAILED" ? "danger" : payment.status === "PENDING" ? "warning" : "neutral"}>
+                    {payment.status}
+                  </AdminBadge>
+                </td>
+                <td className="px-5 py-4">{new Date(payment.createdAt).toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </AdminTable>
+      )}
+      <AdminPagination page={page} totalPages={meta?.totalPages ?? 1} onChange={setPage} />
+    </div>
+  );
 }
-function Card({ label, value }: { label: string; value: string | number }) { return <section className={`${adminCard} p-5`}><p className="text-xs font-bold uppercase text-[#777d88]">{label}</p><p className="mt-2 text-2xl font-bold">{value}</p></section>; }
+
+function Card({ label, value }: { label: string; value: string | number }) {
+  return (
+    <section className={`${adminCard} p-5`}>
+      <p className="text-xs font-bold uppercase text-[#777d88]">{label}</p>
+      <p className="mt-2 text-2xl font-bold">{value}</p>
+    </section>
+  );
+}
