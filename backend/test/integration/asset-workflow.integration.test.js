@@ -22,6 +22,7 @@ if (!integrationEnabled()) {
     let category;
     let brand;
     let assetId;
+    let claimId;
 
     test.before(async () => {
         await prisma.$queryRaw`SELECT 1`;
@@ -109,6 +110,21 @@ if (!integrationEnabled()) {
         assert.equal(body.code, "FORBIDDEN");
     });
 
+    test("creates a claim tied to the asset before deletion", async () => {
+        const { response, body } = await server.request("/claims", {
+            method: "POST",
+            ...auth(),
+            body: JSON.stringify({
+                productId: assetId,
+                title: "Delete cascade check",
+                issueDescription: "This claim should be removed when the asset is deleted.",
+            }),
+        });
+
+        assert.equal(response.status, 201);
+        claimId = body.data.id;
+    });
+
     test("deletes the asset through its lifecycle policy", async () => {
         const result = await server.request(`/products/${assetId}`, {
             method: "DELETE",
@@ -119,5 +135,6 @@ if (!integrationEnabled()) {
 
         const stored = await prisma.product.findUnique({ where: { id: assetId } });
         assert.equal(stored.isDeleted, true);
+        assert.equal(await prisma.claim.findUnique({ where: { id: claimId } }), null);
     });
 }

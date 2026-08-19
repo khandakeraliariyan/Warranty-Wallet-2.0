@@ -1,4 +1,5 @@
 const prisma = require("../../config/prisma");
+const productRepository = require("../product/product.repository");
 
 const getDashboardStatistics = async () => {
 
@@ -213,18 +214,7 @@ const findProductById = (id) => {
 };
 
 const deleteProduct = (id) => {
-
-    return prisma.product.update({
-
-        where: {
-            id,
-        },
-
-        data: {
-            isDeleted: true,
-        },
-
-    });
+    return productRepository.softDelete(id);
 
 };
 

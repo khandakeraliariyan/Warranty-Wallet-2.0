@@ -95,13 +95,21 @@ const update = (id, payload) => {
 };
 
 const softDelete = (id) => {
-    return prisma.product.update({
-        where: {
-            id,
-        },
-        data: {
-            isDeleted: true,
-        },
+    return prisma.$transaction(async (tx) => {
+        await tx.claim.deleteMany({
+            where: {
+                productId: id,
+            },
+        });
+
+        return tx.product.update({
+            where: {
+                id,
+            },
+            data: {
+                isDeleted: true,
+            },
+        });
     });
 };
 
