@@ -182,6 +182,14 @@ const getCategoryAnalytics = async (userId) => {
 
 };
 
+const getWarrantyHeatmap = async (userId) => {
+
+    return dashboardRepository.getWarrantyHeatmap(
+        userId
+    );
+
+};
+
 module.exports = {
 
     getUserDashboard,
@@ -195,5 +203,7 @@ module.exports = {
     getWarrantyAnalytics,
 
     getCategoryAnalytics,
+
+    getWarrantyHeatmap,
 
 };

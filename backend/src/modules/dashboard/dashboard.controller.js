@@ -117,6 +117,24 @@ const getCategoryAnalytics =
 
     });
 
+const getWarrantyHeatmap =
+    asyncHandler(async (req, res) => {
+
+        const heatmap =
+            await dashboardService.getWarrantyHeatmap(
+                req.user.id
+            );
+
+        return res.status(200).json(
+            new ApiResponse(
+                200,
+                "Warranty heatmap fetched successfully.",
+                heatmap
+            )
+        );
+
+    });
+
 module.exports = {
 
     getUserDashboard,
@@ -130,5 +148,7 @@ module.exports = {
     getWarrantyAnalytics,
 
     getCategoryAnalytics,
+
+    getWarrantyHeatmap,
 
 };

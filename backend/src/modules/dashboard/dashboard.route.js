@@ -11,6 +11,8 @@ router.get("/", auth, controller.getUserDashboard);
 
 router.get("/warranty", auth, controller.getWarrantyAnalytics);
 
+router.get("/warranty-heatmap", auth, controller.getWarrantyHeatmap);
+
 router.get("/categories", auth, controller.getCategoryAnalytics);
 
 router.get("/admin", auth, role("ADMIN"), controller.getAdminDashboard);

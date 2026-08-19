@@ -454,6 +454,169 @@ const getAiProcessingCount = (userId) => prisma.document.count({
     },
 });
 
+const getWarrantyHeatmap = async (userId) => {
+    // Get all products with warranty data
+    const products = await prisma.product.findMany({
+        where: {
+            userId,
+            isDeleted: false,
+            hasWarranty: true,
+            lifecycleStatus: "ADDED",
+            expiryDate: { not: null },
+        },
+        select: {
+            id: true,
+            name: true,
+            brand: true,
+            purchasePrice: true,
+            expiryDate: true,
+            warrantyStatus: true,
+            category: {
+                select: {
+                    name: true,
+                },
+            },
+        },
+    });
+
+    // Group by month and calculate statistics
+    const heatmapData = {};
+    const trendData = {};
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    let totalValue = 0;
+    let valueAtRisk = 0;
+    const statusCounts = {
+        ACTIVE: 0,
+        EXPIRING_SOON: 0,
+        EXPIRED: 0,
+        NO_WARRANTY: 0,
+    };
+
+    products.forEach((product) => {
+        const expiryDate = new Date(product.expiryDate);
+        expiryDate.setHours(0, 0, 0, 0);
+
+        // Calculate year-month key
+        const year = expiryDate.getFullYear();
+        const month = String(expiryDate.getMonth() + 1).padStart(2, "0");
+        const monthKey = `${year}-${month}`;
+
+        // Initialize month object if not exists
+        if (!heatmapData[monthKey]) {
+            heatmapData[monthKey] = {
+                month: monthKey,
+                monthName: expiryDate.toLocaleString("default", {
+                    month: "short",
+                    year: "numeric",
+                }),
+                date: expiryDate,
+                products: [],
+                count: 0,
+                value: 0,
+                statusBreakdown: {
+                    ACTIVE: 0,
+                    EXPIRING_SOON: 0,
+                    EXPIRED: 0,
+                },
+            };
+        }
+
+        // Initialize trend data for this month
+        if (!trendData[monthKey]) {
+            trendData[monthKey] = {
+                month: monthKey,
+                date: expiryDate,
+                ACTIVE: 0,
+                EXPIRING_SOON: 0,
+                EXPIRED: 0,
+                totalValue: 0,
+            };
+        }
+
+        // Add product to month
+        const price = Number(product.purchasePrice) || 0;
+        totalValue += price;
+
+        // Track value at risk (expiring soon or expired)
+        if (product.warrantyStatus === "EXPIRING_SOON" || product.warrantyStatus === "EXPIRED") {
+            valueAtRisk += price;
+        }
+
+        heatmapData[monthKey].products.push({
+            id: product.id,
+            name: product.name,
+            brand: product.brand,
+            category: product.category?.name || "Uncategorized",
+            purchasePrice: price,
+            expiryDate: expiryDate,
+            warrantyStatus: product.warrantyStatus,
+            daysUntilExpiry: Math.ceil((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)),
+        });
+
+        heatmapData[monthKey].count += 1;
+        heatmapData[monthKey].value += price;
+        heatmapData[monthKey].statusBreakdown[product.warrantyStatus] =
+            (heatmapData[monthKey].statusBreakdown[product.warrantyStatus] || 0) + 1;
+
+        // Update trend data
+        trendData[monthKey][product.warrantyStatus]++;
+        trendData[monthKey].totalValue += price;
+
+        // Update overall status counts
+        statusCounts[product.warrantyStatus]++;
+    });
+
+    // Sort by date and convert to array
+    const sortedHeatmap = Object.values(heatmapData)
+        .sort((a, b) => a.date - b.date)
+        .map((month) => ({
+            ...month,
+            date: month.date.toISOString(),
+        }));
+
+    // Sort trend data and format for chart
+    const sortedTrend = Object.values(trendData)
+        .sort((a, b) => a.date - b.date)
+        .map((month) => ({
+            month: month.month,
+            monthName: new Date(month.date).toLocaleString("default", {
+                month: "short",
+                year: "2-digit",
+            }),
+            ACTIVE: month.ACTIVE,
+            EXPIRING_SOON: month.EXPIRING_SOON,
+            EXPIRED: month.EXPIRED,
+            totalValue: month.totalValue,
+            totalItems: month.ACTIVE + month.EXPIRING_SOON + month.EXPIRED,
+        }));
+
+    // Calculate health score
+    const totalProducts = products.length;
+    const healthScore =
+        totalProducts === 0
+            ? 100
+            : Math.max(
+                0,
+                Math.round(
+                    ((statusCounts.ACTIVE + statusCounts.EXPIRING_SOON * 0.5) / totalProducts) * 100
+                )
+            );
+
+    return {
+        summary: {
+            totalProducts,
+            totalValue,
+            valueAtRisk,
+            healthScore,
+            statusCounts,
+        },
+        heatmap: sortedHeatmap,
+        trend: sortedTrend,
+    };
+};
+
 module.exports = {
     getProductStatistics,
     getDocumentStatistics,
@@ -465,6 +628,7 @@ module.exports = {
     getRecentActivities,
     getCategoryDistribution,
     getWarrantyTimeline,
+    getWarrantyHeatmap,
     getAdminStatistics,
     getRecentPayments,
     getMonthlyRevenue,
