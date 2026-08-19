@@ -1,10 +1,11 @@
 import type { SVGProps } from "react";
 
-type IconName = "sparkles" | "arrow" | "scan" | "calendar" | "vault" | "support" | "receipt" | "warning" | "check" | "dashboard" | "products" | "documents" | "notifications" | "profile" | "settings" | "logout" | "claims" | "insights" | "clipboard" | "shield" | "laptop" | "printer" | "more" | "search" | "list" | "filter" | "plus" | "headphones" | "watch" | "upload" | "download" | "folder" | "link" | "image" | "chair";
+type IconName = "sparkles" | "arrow" | "arrow-left" | "scan" | "calendar" | "vault" | "support" | "receipt" | "warning" | "check" | "dashboard" | "products" | "documents" | "notifications" | "profile" | "settings" | "logout" | "claims" | "insights" | "clipboard" | "shield" | "laptop" | "printer" | "more" | "search" | "list" | "filter" | "plus" | "headphones" | "watch" | "upload" | "download" | "folder" | "link" | "image" | "chair";
 
 const paths: Record<IconName, React.ReactNode> = {
   sparkles: <path d="m12 3 1.2 3.8L17 8l-3.8 1.2L12 13l-1.2-3.8L7 8l3.8-1.2L12 3Zm-6 9 .8 2.2L9 15l-2.2.8L6 18l-.8-2.2L3 15l2.2-.8L6 12Zm11 2 .8 2.2L20 17l-2.2.8L17 20l-.8-2.2L14 17l2.2-.8L17 14Z" />,
   arrow: <path d="M5 12h14m-5-5 5 5-5 5" />,
+  "arrow-left": <path d="M19 12H5m5 5-5-5 5-5" />,
   scan: <><path d="M4 7V4h3M17 4h3v3M20 17v3h-3M7 20H4v-3"/><path d="M7 9h10v6H7zM9 12h6"/></>,
   calendar: <><path d="M5 5h14v15H5zM8 3v4m8-4v4M5 9h14"/><path d="m9 14 2 2 4-4"/></>,
   vault: <><path d="M4 7h16v13H4zM7 4h10v3M8 11h8M8 15h5"/></>,

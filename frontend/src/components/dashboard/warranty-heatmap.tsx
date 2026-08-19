@@ -138,7 +138,7 @@ export function WarrantyHeatmap() {
                     {
                         label: "Health Score",
                         value: `${summary.healthScore}%`,
-                        icon: "trending-up",
+                        icon: "sparkles",
                         color: "text-[#059669]",
                     },
                 ].map((stat) => (
