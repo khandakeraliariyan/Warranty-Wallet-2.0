@@ -8,6 +8,10 @@ import { useAuth } from "@/contexts/auth-context";
 import { getWarrantyHeatmap, type WarrantyHeatmapData } from "@/lib/dashboard-api";
 import { WarrantyTrendChart } from "./warranty-trend-chart";
 
+interface WarrantyHeatmapProps {
+    healthScoreOverride?: number;
+}
+
 const currencyFormatter = new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
@@ -92,7 +96,7 @@ function MonthCard({ month }: { month: MonthCell }) {
     );
 }
 
-export function WarrantyHeatmap() {
+export function WarrantyHeatmap({ healthScoreOverride }: WarrantyHeatmapProps) {
     const { firebaseUser } = useAuth();
     const { data, error, isPending } = useQuery<WarrantyHeatmapData>({
         queryKey: ["warranty-heatmap", firebaseUser?.uid],
@@ -137,7 +141,7 @@ export function WarrantyHeatmap() {
                     },
                     {
                         label: "Health Score",
-                        value: `${summary.healthScore}%`,
+                        value: `${healthScoreOverride ?? summary.healthScore}%`,
                         icon: "sparkles",
                         color: "text-[#059669]",
                     },
